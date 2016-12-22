@@ -676,6 +676,7 @@ public class WheelPicker extends View implements IDebug, IWheelPicker, Runnable 
     public boolean onTouchEvent(MotionEvent event) {
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
+                isClick = true;
                 if (null != getParent())
                     getParent().requestDisallowInterceptTouchEvent(true);
                 if (null == mTracker)
@@ -692,51 +693,53 @@ public class WheelPicker extends View implements IDebug, IWheelPicker, Runnable 
             case MotionEvent.ACTION_MOVE:
                 if (Math.abs(mDownPointY - event.getY()) < mTouchSlop) {
                     isClick = true;
-                    break;
-                }
-                isClick = false;
-                mTracker.addMovement(event);
-                if (null != mOnWheelChangeListener)
-                    mOnWheelChangeListener.onWheelScrollStateChanged(SCROLL_STATE_DRAGGING);
+                } else {
+                    isClick = false;
+                    mTracker.addMovement(event);
+                    if (null != mOnWheelChangeListener)
+                        mOnWheelChangeListener.onWheelScrollStateChanged(SCROLL_STATE_DRAGGING);
 
-                // 滚动内容
-                // Scroll WheelPicker's content
-                float move = event.getY() - mLastPointY;
-                if (Math.abs(move) < 1) break;
-                mScrollOffsetY += move;
-                mLastPointY = (int) event.getY();
-                invalidate();
+                    // 滚动内容
+                    // Scroll WheelPicker's content
+                    float move = event.getY() - mLastPointY;
+                    if (Math.abs(move) < 1) break;
+                    mScrollOffsetY += move;
+                    mLastPointY = (int) event.getY();
+                    invalidate();
+                }
                 break;
             case MotionEvent.ACTION_UP:
                 if (null != getParent())
                     getParent().requestDisallowInterceptTouchEvent(false);
-                if (isClick) break;
-                mTracker.addMovement(event);
+                if (!isClick || isForceFinishScroll) {
+                    mTracker.addMovement(event);
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.DONUT)
-                    mTracker.computeCurrentVelocity(1000, mMaximumVelocity);
-                else
-                    mTracker.computeCurrentVelocity(1000);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.DONUT)
+                        mTracker.computeCurrentVelocity(1000, mMaximumVelocity);
+                    else
+                        mTracker.computeCurrentVelocity(1000);
 
-                // 根据速度判断是该滚动还是滑动
-                // Judges the WheelPicker is scroll or fling base on current velocity
-                isForceFinishScroll = false;
-                int velocity = (int) mTracker.getYVelocity();
-                if (Math.abs(velocity) > mMinimumVelocity) {
-                    mScroller.fling(0, mScrollOffsetY, 0, velocity, 0, 0, mMinFlingY, mMaxFlingY);
-                    mScroller.setFinalY(mScroller.getFinalY() +
-                            computeDistanceToEndPoint(mScroller.getFinalY() % mItemHeight));
-                } else {
-                    mScroller.startScroll(0, mScrollOffsetY, 0,
-                            computeDistanceToEndPoint(mScrollOffsetY % mItemHeight));
+                    // 根据速度判断是该滚动还是滑动
+                    // Judges the WheelPicker is scroll or fling base on current velocity
+                    isForceFinishScroll = false;
+                    int velocity = (int) mTracker.getYVelocity();
+                    if (Math.abs(velocity) > mMinimumVelocity) {
+                        mScroller.fling(0, mScrollOffsetY, 0, velocity, 0, 0, mMinFlingY, mMaxFlingY);
+                        mScroller.setFinalY(mScroller.getFinalY() +
+                                computeDistanceToEndPoint(mScroller.getFinalY() % mItemHeight));
+                    } else {
+                        mScroller.startScroll(0, mScrollOffsetY, 0,
+                                computeDistanceToEndPoint(mScrollOffsetY % mItemHeight));
+                    }
+                    // 校正坐标
+                    // Correct coordinates
+                    if (!isCyclic)
+                        if (mScroller.getFinalY() > mMaxFlingY)
+                            mScroller.setFinalY(mMaxFlingY);
+                        else if (mScroller.getFinalY() < mMinFlingY)
+                            mScroller.setFinalY(mMinFlingY);
                 }
-                // 校正坐标
-                // Correct coordinates
-                if (!isCyclic)
-                    if (mScroller.getFinalY() > mMaxFlingY)
-                        mScroller.setFinalY(mMaxFlingY);
-                    else if (mScroller.getFinalY() < mMinFlingY)
-                        mScroller.setFinalY(mMinFlingY);
+
                 mHandler.post(this);
                 if (null != mTracker) {
                     mTracker.recycle();
